@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Users {
+  /// 유저 ID
+  id           BigInt    @id @default(autoincrement())
+  /// 전화번호
+  phone        String    @db.VarChar(15) @unique
+  /// 이름
+  userName     String    @db.VarChar(10)
+  /// 별명
+  userTitle    String    @db.VarChar(10)
+  /// 프로필 사진 경로 (S3)
+  userPicPath  String?   @db.VarChar(255)
+  /// 생성 일자
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  reacts React[] @relation("UserReacts")
+  /// Posts와 1:N 관계
+  posts        Posts[]   @relation("UserPosts")
+  /// Posts와 다대다 관계 (태그)
+  taggedPosts  PostTags[] @relation("UserTaggedPosts")
+  // Heart 와 1:N 관계 
+  hearts Heart[] @relation("UserHeart")
+}
+
+enum PostStatus {
+  PUBLIC 
+  HIDDEN
+  FILTERD // 삭제
+}
+
+model Posts {
+  /// 게시물 ID
+  id         BigInt    @id @default(autoincrement())
+  /// 사진 S3 경로
+  picPath    String    @db.VarChar(255)
+  /// 설명 (bio)
+  bio        String    @db.VarChar(50)
+  // 게시글 상태 (FILTERD=필터링 됨)
+  status PostStatus 
+  /// 유저 ID
+  userId     BigInt   
+  /// Users와 1:N 관계
+  user       Users     @relation("UserPosts", fields: [userId], references: [id])
+  /// Users와 다대다 관계 (태그)
+  tags       PostTags[] @relation("PostTaggedUsers")
+  /// React와 1:N 관계
+  reacts     React[]   @relation("PostReacts")
+  // Heart 와 1:N 관계 
+  hearts Heart[] @relation("PostHearts")
+}
+
+model PostTags {
+  /// 게시물 ID
+  postId     BigInt    @map("post_id")
+  /// 유저 ID
+  userId     BigInt    @map("user_id")
+
+  post       Posts     @relation("PostTaggedUsers", fields: [postId], references: [id])
+  user       Users     @relation("UserTaggedPosts", fields: [userId], references: [id])
+
+  /// 복합 키
+  @@id([postId, userId])
+}
+
+model React {
+  /// 리액션 ID
+  id         BigInt    @id @default(autoincrement())
+  /// 게시물 ID
+  postId     BigInt 
+  // 유저 ID 
+  userId BigInt
+  /// 리액션 (이모지)
+  content       String    @db.VarChar(1)
+
+  /// 게시물 관계
+  user  Users @relation("UserReacts", fields: [userId], references: [id])
+  post       Posts     @relation("PostReacts", fields: [postId], references: [id])
+}
+
+model Heart {
+  // 고유 ID 
+  id BigInt @id @default(autoincrement())
+  // 게시물 ID 
+  postId BigInt 
+  // 유저 ID 
+  userId BigInt 
+
+  user  Users @relation("UserHeart", fields: [userId], references: [id])
+  post       Posts     @relation("PostHearts", fields: [postId], references: [id])
+}
