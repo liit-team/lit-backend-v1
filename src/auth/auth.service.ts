@@ -1,13 +1,19 @@
+import { Secret } from './../../node_modules/@types/jsonwebtoken/index.d';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { Redis } from 'ioredis';
 import { RegisterUserDto } from './dto/auth.dto';
+import { Users } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: Redis,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -15,7 +21,7 @@ export class AuthService {
    * @param data
    * @returns
    */
-  async RegisterUser(data: RegisterUserDto) {
+  async registerUser(data: RegisterUserDto) {
     // 이미 가입한 유저 여부를 확인합니다.
     const isUserExist = await this.prisma.users.findUnique({
       where: {
@@ -43,5 +49,112 @@ export class AuthService {
     return {
       message: 'SUCCESS',
     };
+  }
+
+  /**
+   * AccessToken과 RefreshToken을 생성하는 함수입니다.
+   *
+   * @param user
+   * @returns
+   */
+  async generateBothTokens(
+    user: Users,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    try {
+      // 두 개의 토큰을 생성합니다.
+      const payload = {
+        id: user.id,
+      };
+      const accessToken = await this.jwtService.signAsync(payload);
+      const refreshToken = await this.jwtService.signAsync(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<number>(
+          'JWT_REFRESH_EXPIRATION_TIME',
+        ),
+      });
+
+      // 만료 시간을 설정합니다.
+      const expirationTimeInSeconds = parseInt(
+        this.configService.get<string>('JWT_REFRESH_EXPIRATION_TIME') || '0',
+        10,
+      );
+
+      // redis 에 Refresh 토큰을 저장합니다.
+      await this.redis.set(
+        user.id.toString(),
+        refreshToken,
+        'EX',
+        expirationTimeInSeconds,
+      );
+
+      return { accessToken, refreshToken };
+    } catch (e) {
+      throw new e();
+    }
+  }
+
+  /**
+   * Redis에 저장된 토큰을 가져오고, 검증 한 후 두 토큰을 발급합니다.
+   * 새로 발급된 Refresh토큰은 새로 Redis에 저장됩니다.
+   * @param user
+   * @param refreshToken
+   */
+  async refreshTokens(user: Users, refreshToken: string) {
+    // Redis에 저장된 Refresh토큰을 가져옵니다.
+    const storedRefToken = await this.redis.get(user.id.toString());
+
+    // 저장된 Ref 토큰과 인자로 받은 Ref토큰이 일치한 지 검사합니다.
+    if (!storedRefToken || storedRefToken != refreshToken) {
+      throw new HttpException('WRONG_OR_EXPIRED_TOKEN', HttpStatus.BAD_REQUEST);
+    }
+
+    // Ref 토큰을 디코딩합니다.
+    const decodedRefToken = await this.jwtService.verifyAsync(refreshToken, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+    });
+
+    // Decoded 토큰이 없으면 반환합니다.
+    if (!decodedRefToken) {
+      throw new HttpException('EXPIRED_TOKEN', HttpStatus.BAD_GATEWAY);
+    }
+
+    // 새로운 액세스 토큰을 발급합니다.
+    const newAccessToken = await this.jwtService.signAsync(user.id.toString(), {
+      secret: this.configService.get<string>('JWT_SECRET'),
+    });
+
+    // refreshTime 선언
+    const refreshExpirationTime = parseInt(
+      this.configService.get<string>('JWT_REFRESH_EXPIRATION_TIME') || '0',
+      10,
+    );
+
+    // refresh Token을 발급합니다
+    const newRefreshToken = await this.jwtService.signAsync(
+      { id: user.id.toString() },
+      {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: refreshExpirationTime,
+      },
+    );
+
+    return { newAccessToken, newRefreshToken };
+  }
+
+  /**
+   * 액세스 토큰을 검증합니다.
+   *
+   * @param token
+   * @returns
+   */
+  async validateAccessTokens(token: string) {
+    try {
+      await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }
