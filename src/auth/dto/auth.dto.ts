@@ -1,6 +1,6 @@
 import {
   IsPhoneNumber,
-  IsNumberString,
+  IsNotEmpty,
   Length,
   IsOptional,
   IsString,
@@ -12,23 +12,33 @@ export class RegisterUserDto {
    */
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   public profilePath: string;
 
   /**
    * 사용자 이름
    */
   @IsString()
+  @IsNotEmpty()
   public username: string;
 
   /**
    * 사용자 별명
    */
   @IsString()
+  @IsNotEmpty()
   public usertitle: string;
 
   /**
    * 사용자 전화번호
    */
-  @IsPhoneNumber()
+  @IsPhoneNumber('KR')
+  @IsNotEmpty()
   public phoneNumber: string;
+}
+
+export class LoginDto {
+  @IsPhoneNumber('KR')
+  @IsNotEmpty()
+  public phone: string;
 }

@@ -1,20 +1,28 @@
-import { Secret } from './../../node_modules/@types/jsonwebtoken/index.d';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { Redis } from 'ioredis';
-import { RegisterUserDto } from './dto/auth.dto';
+import { LoginDto, RegisterUserDto } from './dto/auth.dto';
 import { Users } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
+  private readonly redis: Redis;
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: Redis,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.redis = new Redis({
+      host: this.configService.get<string>('REDIS_HOST') || 'localhost',
+      port: parseInt(
+        this.configService.get<string>('REDIS_PORT') || '6379',
+        10,
+      ),
+    });
+  }
 
   /**
    * 사용자를 생성합니다.
@@ -31,11 +39,11 @@ export class AuthService {
 
     // 만약 이미 가입했다면 반환합니다.
     if (isUserExist) {
-      throw new HttpException('BAD_REQUEST', HttpStatus.BAD_REQUEST);
+      throw new HttpException('ALEADY_REGISTERD', HttpStatus.BAD_REQUEST);
     }
 
     // 새로운 유저를 생성합니다.
-    await this.prisma.users.create({
+    const user = await this.prisma.users.create({
       data: {
         phone: data.phoneNumber,
         userName: data.username,
@@ -44,12 +52,26 @@ export class AuthService {
       },
     });
 
-    // const token =
+    const { accessToken, refreshToken } = await this.generateBothTokens(user);
+
+    if (!accessToken || !refreshToken) {
+      throw new HttpException('TOKEN_NOT_GENERATED', HttpStatus.BAD_REQUEST);
+    }
 
     return {
       message: 'SUCCESS',
+      data: {
+        accessToken: accessToken.toString(),
+        refreshToken: refreshToken.toString(),
+      },
     };
   }
+
+  /**
+   * 유저의 로그인을 처리하는 함수입니다.
+   * @param data
+   */
+  async loginUser(data: LoginDto) {}
 
   /**
    * AccessToken과 RefreshToken을 생성하는 함수입니다.
@@ -59,11 +81,11 @@ export class AuthService {
    */
   async generateBothTokens(
     user: Users,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  ): Promise<{ accessToken: string | null; refreshToken: string | null }> {
     try {
       // 두 개의 토큰을 생성합니다.
       const payload = {
-        id: user.id,
+        id: user.id.toString(),
       };
       const accessToken = await this.jwtService.signAsync(payload);
       const refreshToken = await this.jwtService.signAsync(payload, {
@@ -89,7 +111,11 @@ export class AuthService {
 
       return { accessToken, refreshToken };
     } catch (e) {
-      throw new e();
+      console.log(e);
+      return {
+        accessToken: null,
+        refreshToken: null,
+      };
     }
   }
 
