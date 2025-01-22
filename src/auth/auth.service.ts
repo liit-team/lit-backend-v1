@@ -35,6 +35,9 @@ export class AuthService {
       where: {
         phone: data.phoneNumber,
       },
+      select: {
+        id: true,
+      },
     });
 
     // 만약 이미 가입했다면 반환합니다.

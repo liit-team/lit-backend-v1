@@ -12,9 +12,9 @@ export class ImageService {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('AWS_REGION'),
       credentials: {
-        accessKeyId: this.configService.get<string>('AWS_S3_ACCESS_KEY') || '',
+        accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID') || '',
         secretAccessKey:
-          this.configService.get<string>('AWS_S3_SECRET_ACCESS_KEY') || '',
+          this.configService.get<string>('AWS_SECRET_ACCESS_KEY') || '',
       },
     });
   }
@@ -25,6 +25,12 @@ export class ImageService {
    * @returns status, message, S3Url
    */
   async imageUploadToS3(file: Express.Multer.File) {
+    if (!file.originalname) {
+      console.log(file);
+      console.log('Here is original name', file.originalname);
+      throw new HttpException('BAD_REQUEST', HttpStatus.BAD_REQUEST);
+    }
+
     try {
       const fileExtension = file.originalname.split('.').pop().toLowerCase();
 

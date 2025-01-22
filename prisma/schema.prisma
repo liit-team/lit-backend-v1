@@ -48,7 +48,7 @@ model Posts {
   /// 유저 ID
   userId     BigInt   
   /// Users와 1:N 관계
-  user       Users     @relation("UserPosts", fields: [userId], references: [id])
+  user       Users     @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
   /// Users와 다대다 관계 (태그)
   tags       PostTags[] @relation("PostTaggedUsers")
   /// React와 1:N 관계
@@ -63,8 +63,8 @@ model PostTags {
   /// 유저 ID
   userId     BigInt    @map("user_id")
 
-  post       Posts     @relation("PostTaggedUsers", fields: [postId], references: [id])
-  user       Users     @relation("UserTaggedPosts", fields: [userId], references: [id])
+  post       Posts     @relation("PostTaggedUsers", fields: [postId], references: [id], onDelete: Cascade)
+  user       Users     @relation("UserTaggedPosts", fields: [userId], references: [id], onDelete: Cascade)
 
   /// 복합 키
   @@id([postId, userId])
@@ -81,8 +81,8 @@ model React {
   content       String    @db.VarChar(1)
 
   /// 게시물 관계
-  user  Users @relation("UserReacts", fields: [userId], references: [id])
-  post       Posts     @relation("PostReacts", fields: [postId], references: [id])
+  user  Users @relation("UserReacts", fields: [userId], references: [id], onDelete: Cascade)
+  post       Posts     @relation("PostReacts", fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model Heart {
@@ -93,6 +93,8 @@ model Heart {
   // 유저 ID 
   userId BigInt 
 
-  user  Users @relation("UserHeart", fields: [userId], references: [id])
-  post       Posts     @relation("PostHearts", fields: [postId], references: [id])
+  user  Users @relation("UserHeart", fields: [userId], references: [id], onDelete: Cascade)
+  post       Posts     @relation("PostHearts", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
 }
