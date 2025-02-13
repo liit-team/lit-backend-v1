@@ -55,7 +55,7 @@ export class PostService {
           picPath: S3Url,
           bio: data.content,
           status: 'PUBLIC',
-          userId: BigInt(userId),
+          takenById: BigInt(userId),
         },
       });
 
@@ -97,7 +97,7 @@ export class PostService {
       throw new HttpException('POST_NOT_FOUND', HttpStatus.NOT_FOUND);
     }
 
-    if (foundPost.userId !== BigInt(userId)) {
+    if (foundPost.takenById !== BigInt(userId)) {
       throw new HttpException('FORBIDDEN', HttpStatus.FORBIDDEN);
     }
 
@@ -209,27 +209,39 @@ export class PostService {
     };
   }
 
-  // async getPostById(data: GetPostByIdDto) {
-  //   if (!data.postId) {
-  //     throw new HttpException('BAD_REQUEST', HttpStatus.BAD_REQUEST);
-  //   }
+  /**
+   * 게시글의 정보를 가져옵니다.
+   * @param data
+   * @returns
+   */
+  async getPostById(data: GetPostByIdDto) {
+    if (!data.postId) {
+      throw new HttpException('BAD_REQUEST', HttpStatus.BAD_REQUEST);
+    }
 
-  //   const foundPost = await this.prisma.posts.findFirst({
-  //     where: {
-  //       id: data.postId,
-  //     },
-  //     select: {
-  //       picPath: true,
-  //       bio: true,
-  //       status: true,
-  //       userId: true,
-  //     },
-  //   });
+    const foundPost = await this.prisma.posts.findFirst({
+      where: {
+        id: data.postId,
+      },
+      select: {
+        picPath: true,
+        bio: true,
+        status: true,
+        takenById: true,
+      },
+    });
 
-  //   if (!foundPost) {
-  //     throw new HttpException('NOT_FOUND', HttpStatus.NOT_FOUND);
-  //   }
-  // }
+    if (!foundPost) {
+      throw new HttpException('NOT_FOUND', HttpStatus.NOT_FOUND);
+    }
+
+    return {
+      message: 'SUCCESS',
+      data: {
+        post: foundPost,
+      },
+    };
+  }
 
   /**
    * 게시물에 하트를 삭제하거나 추가합니다.
@@ -265,6 +277,32 @@ export class PostService {
 
     return {
       message: 'SUCCESS',
+    };
+  }
+
+  /**
+   * 유저의 게시글 정보를 가져옵니다.
+   * @param userId
+   * @returns
+   */
+  async getPostByUserId(userId: number) {
+    const posts = await this.prisma.posts.findMany({
+      where: {
+        takenById: BigInt(userId),
+      },
+      select: {
+        id: true,
+        picPath: true,
+        bio: true,
+        status: true,
+      },
+    });
+
+    return {
+      message: 'SUCCESS',
+      data: {
+        posts,
+      },
     };
   }
 }

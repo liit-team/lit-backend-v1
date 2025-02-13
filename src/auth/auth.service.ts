@@ -5,6 +5,7 @@ import { LoginDto, RegisterUserDto } from './dto/auth.dto';
 import { Users } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { ImageService } from 'src/image/image.service';
 
 @Injectable()
 export class AuthService {
@@ -14,6 +15,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly imageService: ImageService,
   ) {
     this.redis = new Redis({
       host: this.configService.get<string>('REDIS_HOST') || 'localhost',
@@ -74,7 +76,33 @@ export class AuthService {
    * 유저의 로그인을 처리하는 함수입니다.
    * @param data
    */
-  async loginUser(data: LoginDto) {}
+  async loginUser(data: LoginDto) {
+    // 유저가 존재하는지 확인합니다
+    const user = await this.prisma.users.findUnique({
+      where: {
+        phone: data.phone,
+      },
+    });
+
+    if (!user) {
+      throw new HttpException('USER_NOT_FOUND', HttpStatus.NOT_FOUND);
+    }
+
+    // 토큰을 생성합니다
+    const { accessToken, refreshToken } = await this.generateBothTokens(user);
+
+    if (!accessToken || !refreshToken) {
+      throw new HttpException('TOKEN_NOT_GENERATED', HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      message: 'SUCCESS',
+      data: {
+        accessToken: accessToken.toString(),
+        refreshToken: refreshToken.toString(),
+      },
+    };
+  }
 
   /**
    * AccessToken과 RefreshToken을 생성하는 함수입니다.
@@ -185,5 +213,59 @@ export class AuthService {
     } catch (e) {
       return false;
     }
+  }
+
+  /**
+   * 프로필 사진을 추가/수정합니다.
+   * @param file
+   * @param userId
+   * @returns
+   */
+  async addProfilePicture(file: Express.Multer.File, userId: number) {
+    if (!file || !userId) {
+      throw new HttpException('CONTENT_HAS_MISSING', HttpStatus.BAD_REQUEST);
+    }
+
+    let S3Url: string;
+
+    try {
+      S3Url = await this.imageService.imageUploadToS3(file);
+    } catch (e) {
+      throw new HttpException(e, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    await this.prisma.users.update({
+      where: {
+        id: BigInt(userId),
+      },
+      data: {
+        userPicPath: S3Url,
+      },
+    });
+    return {
+      message: 'SUCCESS',
+      data: {
+        profileUrl: S3Url,
+      },
+    };
+  }
+
+  async getUserInfo(userId: number) {
+    const user = await this.prisma.users.findUnique({
+      where: {
+        id: BigInt(userId),
+      },
+      select: {
+        id: true,
+        userName: true,
+        userTitle: true,
+        userPicPath: true,
+      },
+    });
+
+    return {
+      message: 'SUCCESS',
+      data: user,
+    };
   }
 }

@@ -20,14 +20,17 @@ model Users {
   userPicPath  String?   @db.VarChar(255)
   /// 생성 일자
   createdAt    DateTime  @default(now()) @map("created_at")
+  /// 업데이트 일자
+  updatedAt    DateTime?  @updatedAt
 
-  reacts React[] @relation("UserReacts")
-  /// Posts와 1:N 관계
-  posts        Posts[]   @relation("UserPosts")
   /// Posts와 다대다 관계 (태그)
   taggedPosts  PostTags[] @relation("UserTaggedPosts")
   // Heart 와 1:N 관계 
-  hearts Heart[] @relation("UserHeart")
+  hearts       Heart[]   @relation("UserHeart")
+  // 내가 찍은 사진들
+  takenPhotos  Posts[]     @relation("TakenPhotos")
+  // 내가 한 리액션들
+  reacts       React[]     @relation("UserReacts")
 }
 
 enum PostStatus {
@@ -44,17 +47,21 @@ model Posts {
   /// 설명 (bio)
   bio        String    @db.VarChar(50)
   // 게시글 상태 (FILTERD=필터링 됨)
-  status PostStatus 
-  /// 유저 ID
-  userId     BigInt   
-  /// Users와 1:N 관계
-  user       Users     @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  status     PostStatus 
   /// Users와 다대다 관계 (태그)
   tags       PostTags[] @relation("PostTaggedUsers")
   /// React와 1:N 관계
   reacts     React[]   @relation("PostReacts")
   // Heart 와 1:N 관계 
-  hearts Heart[] @relation("PostHearts")
+  hearts     Heart[]   @relation("PostHearts")
+  /// 사진 찍은 사람
+  takenBy    Users     @relation("TakenPhotos", fields: [takenById], references: [id], onDelete: Cascade)
+  /// 사진 찍은 사람 ID
+  takenById  BigInt 
+  /// 생성 일자
+  createdAt  DateTime  @default(now())
+  /// 업데이트 일자
+  updatedAt  DateTime?  @updatedAt 
 }
 
 model PostTags {
@@ -68,6 +75,8 @@ model PostTags {
 
   /// 복합 키
   @@id([postId, userId])
+  /// 생성 일자
+  createdAt  DateTime @default(now())
 }
 
 model React {
@@ -76,24 +85,31 @@ model React {
   /// 게시물 ID
   postId     BigInt 
   // 유저 ID 
-  userId BigInt
+  userId     BigInt
   /// 리액션 (이모지)
-  content       String    @db.VarChar(1)
+  content    String    @db.VarChar(1)
+  /// 생성 일자
+  createdAt  DateTime @default(now())
 
   /// 게시물 관계
-  user  Users @relation("UserReacts", fields: [userId], references: [id], onDelete: Cascade)
+  user       Users     @relation("UserReacts", fields: [userId], references: [id], onDelete: Cascade)
   post       Posts     @relation("PostReacts", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
 }
 
 model Heart {
   // 고유 ID 
-  id BigInt @id @default(autoincrement())
-  // 게시물 ID 
-  postId BigInt 
-  // 유저 ID 
-  userId BigInt 
+  id         BigInt    @id @default(autoincrement())
+  /// 생성 일자
+  createdAt  DateTime  @default(now())
 
-  user  Users @relation("UserHeart", fields: [userId], references: [id], onDelete: Cascade)
+  // 게시물 ID 
+  postId     BigInt 
+  // 유저 ID 
+  userId     BigInt 
+
+  user       Users     @relation("UserHeart", fields: [userId], references: [id], onDelete: Cascade)
   post       Posts     @relation("PostHearts", fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
